@@ -1,0 +1,595 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<title>COMP 8903 Final Project</title>
+		<style>
+			body {
+				margin: 0;
+				padding: 0;
+				background-color: #6495ED;
+			}
+
+			ul {
+				list-style: none;
+			}
+
+			#legend {
+				float: left;
+				margin-top: 50px;
+				margin-left: 20px;
+			}
+		</style>
+		<script src="js/vue.min.js"></script>
+		<script src="js/mousetrap.min.js"></script>
+		<script src="js/pixi.min.js"></script>
+		<script src="js/SAT.js"></script>
+	</head>
+	<body>
+		<section id="container">
+			<table>
+				<tr>
+					<td>F</td>
+					<td>{{ car.forces.back.magnitude }} N</td>
+					<td>at</td>
+					<td>({{ car.forces.back.point().x.toFixed(0) }}, {{ car.forces.back.point().y.toFixed(0) }})</td>
+				</tr>
+
+				<tr>
+					<td>R</td>
+					<td>{{ car.forces.right.magnitude }} N</td>
+					<td>at</td>
+					<td>({{ car.forces.right.point().x.toFixed(0) }}, {{ car.forces.right.point().y.toFixed(0) }})</td>
+				</tr>
+
+				<tr>
+					<td>L</td>
+					<td>{{ car.forces.left.magnitude }} N</td>
+					<td>at</td>
+					<td>({{ car.forces.left.point().x.toFixed(0) }}, {{ car.forces.left.point().y.toFixed(0) }})</td>
+				</tr>
+
+				<tr>
+					<td>acceleration</td>
+					<td>({{ car.acceleration().x.toFixed(2) }}, {{ car.acceleration().y.toFixed(2) }})</td>
+				</tr>
+
+				<tr>
+					<td>J</td>
+					<td></td>
+				</tr>
+
+
+			</table>
+		</section>
+
+		<script>
+			var gameTime;
+			var clearForce;
+			var dragConstant = 100;
+
+			function normalize(vector) {
+				return {
+					x: vector.x / Math.sqrt(Math.pow(vector.x, 2) + Math.pow(vector.y, 2)),
+					y: vector.y / Math.sqrt(Math.pow(vector.x, 2) + Math.pow(vector.y, 2)),
+					z: 0
+				};
+			}
+
+			function magnitude(vector) {
+				return Math.sqrt(vector.x * vector.x + vector.y + vector.y);
+			}
+
+			function add(a, b) {
+				return {x: a.x + b.x, y: a.y + b.y};
+			}
+
+			function diff(a, b) {
+				return {x: a.x - b.x, y: a.y - b.y};
+			}
+
+			function negate(vector) {
+				return {x: -vector.x, y: -vector.y};
+			}
+
+			function vec3MulScalar(a, b) {
+				if (!a.z) a.z = 0;
+				return {x: a.x * b, y: a.y * b, z: a.z * b};
+			}
+
+			function dot(a, b) {
+				if (!a.z) a.z = 0;
+				if (!b.z) b.z = 0;
+				return a.x * b.x + a.y * b.y + a.z + b.z;
+			}
+
+			function cross(a, b) {
+				if (!a.z) a.z = 0;
+				if (!b.z) b.z = 0;
+				return {
+					x: (a.y * b.z - a.z * b.y),
+					y: -(a.x * b.z - a.z * b.x),
+					z: (a.x * b.y - a.y * b.x)
+				};
+			}
+
+			function vec3MulScalar(a, b) {
+				return {x: a.x * b, y: a.y * b, z: a.z * b};
+			}
+
+			function vec3DivScalar(a, b) {
+				return {x: a.x / b, y: a.y / b, z: a.z / b};
+			}
+
+			var nodes = [];
+
+			function Node(attr) {
+				return {
+					name: attr.name,
+					color: attr.color,
+					size: attr.size,
+					position: attr.position,
+					angle: 0,
+					velocity: {x: 0, y: 0},
+					angularVelocity: 0,
+					mass: attr.mass,
+					elastic: attr.elastic,
+
+					vector: function() {
+						return {x: Math.sin(Math.PI/2 - this.angle), y: Math.cos(Math.PI/2 - this.angle)};
+					},
+
+					centerOfMass: function() {
+						return this.position;
+					},
+					inertia: function() {
+						return this.mass * (this.size.width * this.size.width + this.size.height * this.size.height) / 12;
+					},
+					positionDelta: function(dt) {
+						return {
+							x: this.velocity.x * dt/1000,
+							y: this.velocity.y * dt/1000
+						}
+					},
+					velocityDelta: function(dt) {
+						return {
+							x: this.acceleration().x * dt/1000,
+							y: this.acceleration().y * dt/1000
+						};
+					},
+					acceleration: function() {
+						var result = {x: 0, y: 0};
+						if (this.forces) {
+							for (var force in this.forces) {
+								result = add(result, vec3MulScalar(this.vector(), (this.forces[force].magnitude / this.mass)));
+							}
+						}
+
+						var constant = 100;
+						var temp = (thrust - Math.exp(-constant * dt / 1000 / mass) * (thrust - constant * velocity)) / constant
+
+						result = add(result, negate(vec3MulScalar(this.vector(), (100 * magnitude(this.velocity) / this.mass))));
+
+						return result;
+					},
+					angularDelta: function(dt) {
+						return this.angularVelocity * dt/1000;
+					},
+					angularVelocityDelta: function(dt) {
+						return this.angularAcceleration() * dt/1000;
+					},
+					angularAcceleration: function() {
+						var torque = 0;
+						if (this.forces) {
+							for (var force in this.forces) {
+								torque += cross(
+									this.forces[force].point(), 
+									vec3MulScalar(this.vector(), this.forces[force].magnitude)
+								).z;
+							}
+						}
+						return torque / this.inertia();
+					},
+					radius: function() {
+						return {x: this.size.width / 2, y: this.size.height, z: 0};
+					},
+					registerForces: function(forces, obj) {
+						this.forces = forces;
+						for (var force in this.forces) {
+							this.forces[force].point = this.forces[force].point.bind(obj);
+							this.forces[force].vector = this.forces[force].vector.bind(obj);
+						}
+					}
+				};
+			}
+
+
+			var car = new Node({
+				name: 'car',
+				color: 0x0000ff,
+				size: {width: 200, height: 100},
+				position: {x: 0, y: 0},
+				angle: 0,
+				angularVelocity: 0,
+				mass: 1000,
+				elastic: null
+			});
+
+			car.registerForces({
+				back: {
+					magnitude: 0, 
+					point: function() {
+						return {
+							x: this.position.x - this.size.width/2 * Math.cos(this.angle),
+							y: this.position.y - this.size.width/2 * Math.sin(this.angle),
+							z: 0
+						}
+					},
+					vector: function() {
+						return normalize({
+							x: this.centerOfMass().x - this.forces.back.point().x,
+							y: this.centerOfMass().y - this.forces.back.point().y
+						});
+					}
+				},
+				right: {
+					magnitude: 0, 
+					point: function() {
+						var theta = -Math.atan((this.size.height/2) / (this.size.width/2))
+						var radius = Math.sqrt(
+							Math.pow(this.size.width/2, 2) + 
+							Math.pow(this.size.height/2, 2)
+						);
+						return {
+							x: this.position.x + radius * Math.cos(theta),
+							y: this.position.y + radius * Math.sin(theta),
+							z: 0
+						}
+
+					},
+					vector: function() {
+						return normalize({
+							x: this.centerOfMass().x - this.forces.right.point().x,
+							y: this.centerOfMass().y - this.forces.right.point().y
+						});
+					}
+				},
+				left: {
+					magnitude: 0, 
+					point: function() {
+						var theta = Math.atan((this.size.height/2) / (this.size.width/2))
+						var radius = Math.sqrt(
+							Math.pow(this.size.width/2, 2) + 
+							Math.pow(this.size.height/2, 2)
+						);
+						return {
+							x: this.position.x + radius * Math.cos(theta),
+							y: this.position.y + radius * Math.sin(theta),
+							z: 0
+						}
+
+					},
+					vector: function() {
+						return normalize({
+							x: this.centerOfMass().x - this.forces.left.point().x,
+							y: this.centerOfMass().y - this.forces.left.point().y
+						});
+					}
+				}
+			}, car);
+
+			var wallLeft = new Node({
+				name: 'wall',
+				size: {width: 10, height: 800},
+				position: {x: -405, y: 0},
+				mass: 999999999,
+				elastic: 0
+			});
+
+			var wallRight = new Node({
+				name: 'wall',
+				size: {width: 10, height: 800},
+				position: {x: 405, y: 0},
+				mass: 999999999,
+				elastic: 0
+			});
+
+			var wallTop = new Node({
+				name: 'wall',
+				size: {width: 800, height: 10},
+				position: {x: 0, y: 405},
+				mass: 999999999,
+				elastic: 0
+			});
+
+			var wallBottom = new Node({
+				name: 'wall',
+				size: {width: 800, height: 10},
+				position: {x: 0, y: -405},
+				mass: 999999999,
+				elastic: 0
+			});
+
+			var obstacle1 = new Node({
+				name: 'obstacle',
+				size: {width: 100, height: 100},
+				position: {x: 180, y: -10},
+				mass: 500,
+				elastic: 1
+			});
+			var obstacle2 = new Node({
+				name: 'obstacle',
+				size: {width: 100, height: 100},
+				position: {x: 300, y: 10},
+				mass: 500,
+				elastic: 0
+			});
+
+			nodes.push(car);
+			nodes.push(wallLeft);
+			nodes.push(wallRight);
+			nodes.push(wallTop);
+			nodes.push(wallBottom);
+			nodes.push(obstacle1);
+			nodes.push(obstacle2);
+
+			var data = {
+				car : car
+			};
+
+			var dataVM = new Vue({
+				el: '#container',
+				data: data
+			});
+
+			// key bindings
+			Mousetrap.bind('up', function(e) {
+				e.preventDefault();
+				car.forces.back.magnitude = 10000;
+			}, 'keydown');
+
+			Mousetrap.bind('up', function(e) {
+				e.preventDefault();
+				car.forces.back.magnitude = 0;
+				clearForce = true;
+			}, 'keyup');
+
+			Mousetrap.bind('down', function(e) {
+				e.preventDefault();
+				car.forces.back.magnitude = -10000;
+			}, 'keydown');
+
+			Mousetrap.bind('down', function(e) {
+				e.preventDefault();
+				car.forces.back.magnitude = 0;
+				clearForce = true;
+			}, 'keyup');
+
+			Mousetrap.bind('right', function(e) {
+				e.preventDefault();
+				car.forces.right.magnitude = 5000;
+			}, 'keydown');
+
+			Mousetrap.bind('right', function(e) {
+				e.preventDefault();
+				car.forces.right.magnitude = 0;
+				clearForce = true;
+			}, 'keyup');
+
+			Mousetrap.bind('left', function(e) {
+				e.preventDefault();
+				car.forces.left.magnitude = 5000;
+			}, 'keydown');
+
+			Mousetrap.bind('left', function(e) {
+				e.preventDefault();
+				car.forces.left.magnitude = 0;
+				clearForce = true;
+			}, 'keyup');
+
+
+			// rendering
+			var STAGE_WIDTH = 800,
+				STAGE_HEIGHT = 800,
+				STAGE_COLOR = 0x6495ED,
+				ORIGIN_OFFSET_X = STAGE_WIDTH / 2, 
+				ORIGIN_OFFSET_Y = STAGE_HEIGHT / 2;
+			var renderer = PIXI.autoDetectRenderer(
+					STAGE_WIDTH, 
+					STAGE_HEIGHT, 
+					{backgroundColor: STAGE_COLOR});
+
+			document.body.insertBefore(renderer.view, document.body.firstChild);
+			renderer.view.style.float = 'left';
+
+			var stage = new PIXI.Container();
+			var graphics = new PIXI.Graphics();
+			graphics.clear();
+			graphics.lineStyle(3, 0xffffff, 1);
+			graphics.moveTo(STAGE_WIDTH / 2, 0);
+			graphics.lineTo(STAGE_WIDTH / 2, STAGE_HEIGHT);
+			graphics.moveTo(0, STAGE_HEIGHT / 2);
+			graphics.lineTo(STAGE_WIDTH, STAGE_HEIGHT / 2);
+			stage.addChild(graphics);
+
+			var carSprite = new PIXI.Graphics();
+			carSprite.x = ORIGIN_OFFSET_X + car.position.x;
+			carSprite.y = ORIGIN_OFFSET_Y - car.position.y;
+			carSprite.lineStyle(0);
+			carSprite.beginFill(car.color, 1);
+			carSprite.drawRect(-car.size.width/2, -car.size.height/2, car.size.width, car.size.height);
+			carSprite.endFill();
+			car.sprite = carSprite;
+			stage.addChild(carSprite);
+
+			var arrowSprite = new PIXI.Graphics();
+			carSprite.addChild(arrowSprite);
+
+			var arrowRightSprite = new PIXI.Graphics();
+			carSprite.addChild(arrowRightSprite);
+
+			var arrowLeftSprite = new PIXI.Graphics();
+			carSprite.addChild(arrowLeftSprite);
+
+			for (var i = 0; i < nodes.length; i++) {
+				if (nodes[i].name === 'obstacle') {
+					var sprite = new PIXI.Graphics();
+					sprite.x = ORIGIN_OFFSET_X + nodes[i].position.x;
+					sprite.y = ORIGIN_OFFSET_Y - nodes[i].position.y;
+					sprite.lineStyle(0);
+					if (nodes[i].elastic) {
+						sprite.beginFill(0x00ff00, 1);
+					} else {
+						sprite.beginFill(0x00ffff, 1);
+					}
+					sprite.drawRect(-nodes[i].size.width/2, -nodes[i].size.height/2, nodes[i].size.width, nodes[i].size.height);
+					sprite.endFill();
+					nodes[i].sprite = sprite;
+					stage.addChild(sprite);
+				}
+			}
+
+			function animate() {
+				requestAnimationFrame(animate);
+				var dt = Date.now() - gameTime;
+				gameTime += dt;
+				update(dt);
+				renderer.render(stage);
+			}
+
+			function update(dt) {
+				if (clearForce) {
+					arrowSprite.clear();
+					arrowRightSprite.clear();
+					arrowLeftSprite.clear();
+					clearForce = false;
+				}
+
+				checkCollision();
+
+				var newNodes = [];
+				for (var i = 0; i < nodes.length; i++) {
+					nodes[i].velocity.x += nodes[i].velocityDelta(dt).x;
+					nodes[i].velocity.y += nodes[i].velocityDelta(dt).y;
+
+					nodes[i].position.x += nodes[i].positionDelta(dt).x;
+					nodes[i].position.y += nodes[i].positionDelta(dt).y;
+
+					nodes[i].angularVelocity += nodes[i].angularVelocityDelta(dt);
+					nodes[i].angle += nodes[i].angularDelta(dt);
+
+					if (nodes[i].name !== 'obstacle' || 
+						(magnitude(nodes[i].velocity) <= 300 && nodes[i].angularVelocity <= 6)) {
+						newNodes.push(nodes[i]);
+					} else {
+						nodes[i].sprite.clear();
+					}
+				}
+
+				nodes = newNodes;
+				
+				drawNodes();
+				drawArrow();
+				drawRightArrow();
+				drawLeftArrow();
+			}
+
+			function checkCollision() {
+				// for i loops we want to take the vertices
+				for (var i = 0; i < nodes.length; i++) {
+					var x = nodes[i].position.x, y = nodes[i].position.y,
+						width = nodes[i].size.width, height = nodes[i].size.height,
+						angle = nodes[i].angle;
+					var box1 = new SAT.Box(new SAT.Vector(x, y), width, height).toPolygon();
+					box1.translate(-width/2, -height/2);
+					box1.rotate(angle);
+					for (var j = i+1; j < nodes.length; j++) {
+						x = nodes[j].position.x, y = nodes[j].position.y,
+						width = nodes[j].size.width, height = nodes[j].size.height,
+						angle = nodes[j].angle;
+						var box2 = new SAT.Box(new SAT.Vector(x, y), width, height).toPolygon();
+						box2.translate(-width/2, -height/2);
+						box2.rotate(angle);
+						var response = new SAT.Response();
+						var collided = SAT.testPolygonPolygon(box1, box2, response);
+						if (collided) {
+							if (nodes[i].name === 'wall' && nodes[j].name !== 'wall') {
+								nodes[j].velocity = negate(nodes[j].velocity);
+								nodes[j].angularVelocity = - nodes[j].angularVelocity;
+								response.clear();
+								return;
+							}
+
+							if (nodes[j].name === 'wall' && nodes[i].name !== 'wall') {
+								nodes[i].velocity = negate(nodes[i].velocity);
+								nodes[i].angularVelocity = - nodes[i].angularVelocity;
+								response.clear();
+								return;
+							}
+
+							// edge-edge
+							var v_r = diff(nodes[i].velocity, nodes[j].velocity);
+							var n = response.overlapN;
+							var exp = 0;
+							if (nodes[i].elastic === null) {
+								exp = nodes[j].elastic;
+							} else if (nodes[j].elastic === null) {
+								exp = nodes[i].elastic;
+							} else {
+								exp = (nodes[i].elastic + nodes[j].elastic) / 2;
+							}
+
+							var impulse = (-magnitude(v_r) * (exp + 1)) / 
+								(1/nodes[i].mass + 1/nodes[j].mass + 
+									dot(n, cross(vec3DivScalar(cross(nodes[i].radius(), n), nodes[i].inertia()), nodes[i].radius())) + 
+									dot(n, cross(vec3DivScalar(cross(nodes[j].radius(), n), nodes[j].inertia()), nodes[j].radius())));
+							if (impulse) {
+								nodes[i].velocity = add(nodes[i].velocity, vec3MulScalar(n, impulse/nodes[i].mass));
+								nodes[j].velocity = add(nodes[j].velocity, vec3MulScalar(n, -impulse/nodes[i].mass));
+							}
+
+							response.clear();
+						}
+					}
+				}
+			}
+
+			function drawArrow() {
+				arrowSprite.x = -car.size.width/2;
+				arrowSprite.y = 0;
+				arrowSprite.lineStyle(3, 0x00ff00, 1);
+				arrowSprite.moveTo(0, 0);
+				arrowSprite.lineTo(car.forces.back.magnitude / 200, 0);
+			}
+
+			function drawRightArrow() {
+				arrowRightSprite.x = car.forces.right.point().x - car.position.x;
+				arrowRightSprite.y = -car.forces.right.point().y + car.position.y;
+				arrowRightSprite.lineStyle(3, 0x00ff00, 1);
+				arrowRightSprite.moveTo(0, 0);
+				arrowRightSprite.lineTo(car.forces.right.magnitude / 200, 0);
+			}
+
+			function drawLeftArrow() {
+				arrowLeftSprite.x = car.forces.left.point().x - car.position.x;
+				arrowLeftSprite.y = -car.forces.left.point().y + car.position.y;
+				arrowLeftSprite.lineStyle(3, 0x00ff00, 1);
+				arrowLeftSprite.moveTo(0, 0);
+				arrowLeftSprite.lineTo(car.forces.left.magnitude / 200,0);
+			}
+
+			function drawNodes() {
+				for (var i = 0; i < nodes.length; i++) {
+					if (nodes[i].sprite) {
+						nodes[i].sprite.x = ORIGIN_OFFSET_X + nodes[i].position.x;
+						nodes[i].sprite.y = ORIGIN_OFFSET_Y - nodes[i].position.y;
+						nodes[i].sprite.rotation = -nodes[i].angle;
+					}
+				}
+			}
+
+			gameTime = Date.now();
+			animate();
+
+		</script>
+	</body>	
+</html>
