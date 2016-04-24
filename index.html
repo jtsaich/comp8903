@@ -163,12 +163,6 @@
 								result = add(result, vec3MulScalar(this.vector(), (this.forces[force].magnitude / this.mass)));
 							}
 						}
-
-						var constant = 100;
-						var temp = (thrust - Math.exp(-constant * dt / 1000 / mass) * (thrust - constant * velocity)) / constant
-
-						result = add(result, negate(vec3MulScalar(this.vector(), (100 * magnitude(this.velocity) / this.mass))));
-
 						return result;
 					},
 					angularDelta: function(dt) {
